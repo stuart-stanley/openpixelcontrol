@@ -41,3 +41,7 @@ bin/lpd8806_server: src/lpd8806_server.c src/opc_server.c src/spi.c src/cli.c
 bin/gl_server: src/gl_server.c src/opc_server.c src/cJSON.c
 	mkdir -p bin
 	gcc ${CFLAGS} -o $@ $^ $(GL_OPTS)
+
+bin/ws281x_server: src/ws281x_server.c src/opc_server.c
+	mkdir -p bin
+	gcc ${CFLAGS} -I../rpi_ws281x -L../rpi_ws281x -o $@ $^ -lws2811
