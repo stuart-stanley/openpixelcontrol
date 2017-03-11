@@ -3,8 +3,11 @@
 #include <string.h>
 #include <stdlib.h>
 #include <time.h>
+#include <signal.h>
 #include "ws2811.h"
 #include "opc.h"
+
+static uint8_t running = 1;
 
 #define POST_TX_DELAY_USECS 1000
 // I'm seeing flickering at speeds above ~6mhz. Although the 
@@ -39,8 +42,8 @@ void ws2811_put_pixels(u8 buffer[], u16 count, pixel* pixels) {
       leds = ws2811_handle.channel[chan].leds;
       left_in_chan = ws2811_handle.channel[chan].count;
     }
-    color = (p->r) >> 16;
-    color |= ((p->g) >> 8);
+    color = (p->r) << 16;
+    color |= ((p->g) << 8);
     color |= (p->b);
     *leds = color;
     //printf("leds=%p, color=%x\n", leds, color);
@@ -88,6 +91,7 @@ static int main_loop(u16 port) {
   pixel diagnostic_pixels[DIAG_P_COUNT];
   time_t t;
   u16 inactivity_ms = 0;
+  u8 tv;
   int i;
 
   opc_source s = opc_new_source(port);
@@ -101,20 +105,35 @@ static int main_loop(u16 port) {
     diagnostic_pixels[i].g = 0;
     diagnostic_pixels[i].b = 0;
   }
-  while(1) {
+  while(running) {
     if (opc_receive(s, opc_serve_handler, DIAGNOSTIC_TIMEOUT_MS)) {
       inactivity_ms = 0;
     } else {
       inactivity_ms += DIAGNOSTIC_TIMEOUT_MS;
+      t = time(NULL);
+      tv = t % 256;
       for (i = 0; i < DIAG_P_COUNT; i++ ) {
-	t = time(NULL);
-	diagnostic_pixels[i].r = (t % 3 == 0) ? 64 : 0;
-	diagnostic_pixels[i].g = (t % 3 == 1) ? 64 : 0;
-	diagnostic_pixels[i].b = (t % 3 == 2) ? 64 : 0;
+	diagnostic_pixels[i].r = (t % 3 == 0) ? tv : 0;
+	diagnostic_pixels[i].g = (t % 3 == 1) ? tv : 0;
+	diagnostic_pixels[i].b = (t % 3 == 2) ? tv : 0;
       }
       ws2811_put_pixels(buffer, DIAG_P_COUNT, diagnostic_pixels);
     }
   }
+}
+
+static void ctrl_c_handler(int signum) {
+  running = 0;
+}
+
+static void setup_handlers(void) {
+    struct sigaction sa =
+      {
+        .sa_handler = ctrl_c_handler,
+      };
+
+    sigaction(SIGINT, &sa, NULL);
+    sigaction(SIGTERM, &sa, NULL);
 }
 
 int main(int argc, char** argv) {
@@ -140,6 +159,7 @@ int main(int argc, char** argv) {
     channle = 1
     strip = ws.ws2811_strip_grb
   */
+  setup_handlers();
   memset(&ws2811_handle, 0, sizeof(ws2811_handle));
   ws2811_handle.dmanum = 5;
   ws2811_handle.freq = 800000;
