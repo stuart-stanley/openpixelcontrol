@@ -33,20 +33,30 @@ void ws2811_put_pixels(u8 buffer[], u16 count, pixel* pixels) {
   uint32_t color;
   pixel *p;
   ws2811_return_t ecode;
+  int debug_put_pixels = 0;
 
   p = pixels;
-  //printf("count=%d, pixels=%x\n", count, pixels);
+  if (debug_put_pixels) {
+    printf("count=%d, pixel-addr=%x\n", count, pixels);
+  }
   for (led_inx = 0; led_inx < count; led_inx++) {
     if ( left_in_chan == 0 ) {
       chan++;
+      if (chan > 1) {
+	fprintf(stderr, "overflow of available pixes. Count=%d, current=%d\n", count, led_inx);
+	break;
+      }
       leds = ws2811_handle.channel[chan].leds;
       left_in_chan = ws2811_handle.channel[chan].count;
     }
     color = (p->r) << 16;
     color |= ((p->g) << 8);
     color |= (p->b);
+    p++;
     *leds = color;
-    //printf("leds=%p, color=%x\n", leds, color);
+    if (debug_put_pixels > 1) {
+      printf("  leds=%p, inx=%d, color=%x, p->r=%x, p->g=%x, p->b=%x\n", leds, led_inx, color, p->r, p->g, p->b);
+    }
     leds++;
     left_in_chan--;
   }
@@ -84,7 +94,7 @@ void opc_serve_handler(u8 address, u16 count, pixel* pixels) {
   ws2811_put_pixels(buffer, count, pixels);
 }
 
-#define DIAG_P_COUNT 200
+#define DIAG_P_COUNT 590
 #define DIAGNOSTIC_TIMEOUT_MS 1000
 
 static int main_loop(u16 port) {
@@ -120,9 +130,11 @@ static int main_loop(u16 port) {
       ws2811_put_pixels(buffer, DIAG_P_COUNT, diagnostic_pixels);
     }
   }
+  fprintf(stderr, "exiting main loop\n");
 }
 
 static void ctrl_c_handler(int signum) {
+  fprintf(stderr, "Asked to stop running by signal %d\n", signum);
   running = 0;
 }
 
@@ -164,8 +176,8 @@ int main(int argc, char** argv) {
   ws2811_handle.dmanum = 5;
   ws2811_handle.freq = 800000;
     
-  setup_chan(0, 100, 18);
-  setup_chan(1, 100, 19);
+  setup_chan(0, 256, 18);
+  setup_chan(1, 240+94, 19);
   rcode = ws2811_init(&ws2811_handle);
   if (rcode != WS2811_SUCCESS) {
     fprintf(stderr, "init failed %s\n", ws2811_get_return_t_str(rcode));
